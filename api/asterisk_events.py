@@ -116,7 +116,7 @@ class ActiveCallsManager():
                     calls[0].call_status = CallStatus.rejected
 
 
-# active_calls_manager = ActiveCallsManager()
+active_calls_manager = ActiveCallsManager()
 
 
 @router.get('/channel-status')
