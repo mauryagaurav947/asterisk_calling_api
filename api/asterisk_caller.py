@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from asterisk.ami import AMIClient, AMIClientAdapter, SimpleAction
 
-
 router = APIRouter(tags=["Asterisk caller"])
 
 client = AMIClient(address='192.168.1.32', port=5038)
@@ -28,7 +27,7 @@ class DtmfResponseSchema(BaseModel):
 
 @router.get('/call')
 async def call(mobile_number: str):
-    if (len(mobile_number) == 10):
+    if len(mobile_number) == 10:
         # adapter = AMIClientAdapter(client)
 
         # future = adapter.Originate(
