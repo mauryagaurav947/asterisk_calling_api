@@ -1,28 +1,12 @@
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from asterisk.ami import AMIClient, AMIClientAdapter, SimpleAction
+from handler.database_handler import get_db, DatabaseHandler
 
 router = APIRouter(tags=["Asterisk caller"])
 
 client = AMIClient(address='192.168.1.32', port=5038)
 client.login(username='asterisk', secret='asterisk')
-
-
-def event_listener(event, **kwargs):
-    print(kwargs)
-    print(event)
-
-
-client.add_event_listener(event_listener)
-
-
-# client.add_event_listener('Hangup', event_listener)
-
-
-class DtmfResponseSchema(BaseModel):
-    mobile_number: str
-    exten: str
-    dtmf_response: str
 
 
 @router.get('/call')
@@ -60,12 +44,19 @@ async def call(mobile_number: str):
         }
 
 
-@router.post('/demo')
-async def call(dtmf_response: DtmfResponseSchema):
-    print(dtmf_response.exten)
-    print(dtmf_response.dtmf_response)
-    print(dtmf_response.mobile_number)
-    return {"data": ""}
+@router.get('/demo')
+async def call(machine_number: str, db: DatabaseHandler = Depends(get_db)):
+    result = db.get_channel_status(machine_number=machine_number)
+    return {
+        'id': result[0],
+        'queued': result[1],
+        'dialed': result[2],
+        'answered': result[3],
+        'completed': result[4],
+        'rejected': result[5],
+        'congestion': result[6],
+        'machine_number': result[7],
+    }
 
 
 @router.get('/ami-status')

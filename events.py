@@ -1,12 +1,17 @@
 import socket
 from enum import Enum
 from datetime import datetime
+from handler.database_handler import DatabaseHandler
+import copy
+import requests
 
 # Asterisk AMI credentials
 AMI_HOST = '192.168.1.32'
 AMI_PORT = 5038
 AMI_USER = 'asterisk'
 AMI_PASS = 'asterisk'
+
+db: DatabaseHandler
 
 
 class CallStatus(Enum):
@@ -18,7 +23,7 @@ class CallStatus(Enum):
     congestion = 6
 
 
-class UnAnsweredCallModel():
+class ActiveCallModel():
     unique_id: str
     mobile_number: str
     call_status: CallStatus = CallStatus.queued
@@ -28,11 +33,26 @@ class UnAnsweredCallModel():
         self.mobile_number = mobile_number
 
     def __str__(self) -> str:
-        return f"A(event: {self.event}, unique_id: {self.unique_id}, mobile_number: {self.mobile_number}, call_picked: {self.call_status})"
+        return f"A(unique_id: {self.unique_id}, mobile_number: {self.mobile_number}, call_status: {self.call_status})"
+
+    def __eq__(self, __value: object) -> bool:
+        if isinstance(__value, ActiveCallModel):
+            return self.unique_id == __value.unique_id and self.mobile_number == __value.mobile_number and self.call_status == __value.call_status
+        return False
 
 
-active_calls: list[UnAnsweredCallModel] = []
+active_calls: list[ActiveCallModel] = []
 
+
+def float_parse(a: str) -> float:
+    if a is None:
+        return None
+
+    try:
+        return float(a)
+    except ValueError as error:
+        print(error)
+        return None
 
 # Function to handle AMI events
 
@@ -40,45 +60,67 @@ active_calls: list[UnAnsweredCallModel] = []
 def handle_ami_event(event: str):
     global active_calls
 
+    active_calls_copy = copy.deepcopy(active_calls)
+
+    # Convert the Event string into dictionary
     event_data = dict(item.split(': ', 1)
                       for item in event.splitlines() if ': ' in item)
 
-    if event_data.get('Event') == 'DialBegin':
-        exist = len([item for item in active_calls if item.unique_id ==
-                     event_data.get('DestUniqueid')]) >= 1
+    # Get the event unique id and event
+    event_unique_id = float_parse(event_data.get('DestUniqueid'))
+    event = event_data.get('Event')
+
+    if event_unique_id is None:
+        event_unique_id = float_parse(event_data.get('Uniqueid'))
+    if event_unique_id is None:
+        event_unique_id = float_parse(event_data.get('Linkedid'))
+    if event_unique_id is None:
+        event_unique_id = float_parse(event_data.get('DestLinkedid'))
+
+    # If dial begins add the one active call as queued
+    if event == 'DialBegin':
+        print(event_data)
+        exist = len(
+            [item for item in active_calls if item.unique_id == event_unique_id]) >= 1
         if not exist:
-            active_calls.append(UnAnsweredCallModel(
-                unique_id=event_data.get('Uniqueid'),
+            active_calls.append(ActiveCallModel(
+                unique_id=event_unique_id,
                 mobile_number=event_data.get('DialString').split('/')[1],
             ))
 
-    if event_data.get('Event') == 'RTCPSent':
+    # If received Event is RTPCSent which means call has been initiated
+    if event == 'RTCPSent':
+        print(event_data)
         calls = [item for item in active_calls if item.unique_id ==
-                 event_data.get('Uniqueid')]
+                 event_unique_id]
 
         if len(calls) >= 1 and calls[0].call_status == CallStatus.queued:
             calls[0].call_status = CallStatus.dialed
 
-    if event_data.get('Event') == 'Newstate':
+    # If received Event is Newstate which means call has been picked up
+    if event == 'Newstate':
+        print(event_data)
         calls = [item for item in active_calls if item.unique_id ==
-                 event_data.get('Uniqueid')]
+                 event_unique_id]
 
         if len(calls) == 1 and (calls[0].call_status == CallStatus.dialed or calls[0].call_status == CallStatus.queued):
             calls[0].call_status = CallStatus.answered
 
-    if event_data.get('Event') == 'DialEnd':
+    # If received Event is DialEnd which means call is in congestion
+    if event == 'DialEnd':
+        print(event_data)
         calls = [item for item in active_calls if item.unique_id ==
-                 event_data.get('DestUniqueid')]
+                 event_unique_id]
 
         if len(calls) == 1 and calls[0].call_status == CallStatus.queued:
             calls[0].call_status = CallStatus.congestion
 
-    # if event_data.get('Event') == 'OriginateResponse':
-    #     print(f"Originate response UID {event_data.get('Uniqueid')}")
-
-    if event_data.get('Event') == 'DeviceStateChange':
+    # If received Event is DeviceStateChange which means call is either completed or rejected
+    # If call has picked then `completed` otherwise `rejected`
+    if event == 'DeviceStateChange' or event == 'Hangup':
+        print(event_data)
         calls = [item for item in active_calls if item.unique_id ==
-                 event_data.get('Uniqueid')]
+                 event_unique_id]
 
         if len(calls) >= 1:
             if calls[0].call_status == CallStatus.answered:
@@ -86,39 +128,56 @@ def handle_ami_event(event: str):
             elif calls[0].call_status == CallStatus.dialed:
                 calls[0].call_status = CallStatus.rejected
 
-    # print(f"{event_data.get('Event')} - {event_data.get('Response')}")
-    # if event_data.get('Event') == 'Hangup':
-    #     uniqueid = event_data.get('Uniqueid')
-    #     cause = event_data.get('Cause')
-    #     if cause == '16':  # '16' is the hangup cause code for a rejected call
-    #         print(f"Rejected call with uniqueid {uniqueid}")
-    queued = len(
-        [item for item in active_calls if item.call_status == CallStatus.queued])
-    dialed = len(
-        [item for item in active_calls if item.call_status == CallStatus.dialed])
-    answered = len(
-        [item for item in active_calls if item.call_status == CallStatus.answered])
-    completed = len(
-        [item for item in active_calls if item.call_status == CallStatus.completed])
-    rejected = len(
-        [item for item in active_calls if item.call_status == CallStatus.rejected])
-    congestion = len(
-        [item for item in active_calls if item.call_status == CallStatus.congestion])
+            # If the call is completed or rejected then send a call from congestion and remove that from list
+
+            if calls[0].call_status == CallStatus.completed or calls[0].call_status == CallStatus.rejected:
+                congestion_calls = [
+                    item for item in active_calls if item.call_status == CallStatus.congestion]
+                if len(congestion_calls) > 0:
+                    url = f"http://192.168.1.11:8000/call?mobile_number={congestion_calls[0].mobile_number}"
+                    active_calls.remove(congestion_calls[0])
+                    requests.get(url)
+
+    queued = [item for item in active_calls if item.call_status ==
+              CallStatus.queued]
+    dialed = [item for item in active_calls if item.call_status ==
+              CallStatus.dialed]
+    answered = [item for item in active_calls if item.call_status ==
+                CallStatus.answered]
+    completed = [
+        item for item in active_calls if item.call_status == CallStatus.completed]
+    rejected = [item for item in active_calls if item.call_status ==
+                CallStatus.rejected]
+    congestion = [
+        item for item in active_calls if item.call_status == CallStatus.congestion]
+
+    if active_calls_copy != active_calls:
+        print("Change encountered")
+        db.update_channel_status(queued=len(queued), dialed=len(dialed), answered=len(answered), completed=len(completed),
+                                 rejected=len(rejected), congestion=len(congestion), machine_number="192.168.1.50")
+
+    # db.get_channel_status(machine_number="192.168.1.50")
 
     print(
-        f"Current time ({event_data.get('Event')} - {event_data.get('Uniqueid')}) {datetime.now()}")
-    print(f"Queued calls - {queued}")
-    print(f"Dialed calls - {dialed}")
-    print(f"Answered calls - {answered}")
-    print(f"Completed calls - {completed}")
-    print(f"Rejected calls - {rejected}")
-    print(f"Congestion calls - {congestion}", end="\n\n")
+        f"Current time ({event} - {event_unique_id}) {datetime.now()}")
+
+    for item in active_calls:
+        print(item)
+
+    print(f"Queued calls - {len(queued)}")
+    print(f"Dialed calls - {len(dialed)}")
+    print(f"Answered calls - {len(answered)}")
+    print(f"Completed calls - {len(completed)}")
+    print(f"Rejected calls - {len(rejected)}")
+    print(f"Congestion calls - {len(congestion)}", end="\n\n")
 
 
 # Function to connect and listen for AMI events
 
 
 def listen_for_ami_events():
+    global db
+    db = DatabaseHandler()
     try:
         # Connect to Asterisk AMI
         ami_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

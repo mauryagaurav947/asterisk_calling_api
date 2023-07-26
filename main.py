@@ -1,7 +1,7 @@
 import fastapi
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
-from api import asterisk_caller, asterisk_events
+from api import asterisk_caller
 
 app = fastapi.FastAPI()
 
@@ -15,7 +15,6 @@ app.add_middleware(
 )
 
 app.include_router(asterisk_caller.router)
-app.include_router(asterisk_events.router)
 
 if __name__ == '__main__':
     uvicorn.run("main:app", port=8000, host='0.0.0.0', reload=True)
