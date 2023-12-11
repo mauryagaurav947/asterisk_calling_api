@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from asterisk.ami import AMIClient, AMIClientAdapter, SimpleAction
-from handler.database_handler import get_db, DatabaseHandler
+# from handler.database_handler import get_db, DatabaseHandler
 
 router = APIRouter(tags=["Asterisk caller"])
 
@@ -44,19 +44,19 @@ async def call(mobile_number: str):
         }
 
 
-@router.get('/demo')
-async def call(machine_number: str, db: DatabaseHandler = Depends(get_db)):
-    result = db.get_channel_status(machine_number=machine_number)
-    return {
-        'id': result[0],
-        'queued': result[1],
-        'dialed': result[2],
-        'answered': result[3],
-        'completed': result[4],
-        'rejected': result[5],
-        'congestion': result[6],
-        'machine_number': result[7],
-    }
+# @router.get('/demo')
+# async def call(machine_number: str, db: DatabaseHandler = Depends(get_db)):
+#     result = db.get_channel_status(machine_number=machine_number)
+#     return {
+#         'id': result[0],
+#         'queued': result[1],
+#         'dialed': result[2],
+#         'answered': result[3],
+#         'completed': result[4],
+#         'rejected': result[5],
+#         'congestion': result[6],
+#         'machine_number': result[7],
+#     }
 
 
 @router.get('/ami-status')
