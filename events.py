@@ -1,17 +1,17 @@
 import socket
 from enum import Enum
 from datetime import datetime
-from handler.database_handler import DatabaseHandler
+# from handler.database_handler import DatabaseHandler
 import copy
 import requests
 
 # Asterisk AMI credentials
-AMI_HOST = '192.168.1.32'
+AMI_HOST = '192.168.1.23'
 AMI_PORT = 5038
 AMI_USER = 'asterisk'
 AMI_PASS = 'asterisk'
 
-db: DatabaseHandler
+# db: DatabaseHandler
 
 
 class CallStatus(Enum):
@@ -153,8 +153,8 @@ def handle_ami_event(event: str):
 
     if active_calls_copy != active_calls:
         print("Change encountered")
-        db.update_channel_status(queued=len(queued), dialed=len(dialed), answered=len(answered), completed=len(completed),
-                                 rejected=len(rejected), congestion=len(congestion), machine_number="192.168.1.50")
+        # db.update_channel_status(queued=len(queued), dialed=len(dialed), answered=len(answered), completed=len(completed),
+        #                          rejected=len(rejected), congestion=len(congestion), machine_number="192.168.1.50")
 
     # db.get_channel_status(machine_number="192.168.1.50")
 
@@ -176,8 +176,8 @@ def handle_ami_event(event: str):
 
 
 def listen_for_ami_events():
-    global db
-    db = DatabaseHandler()
+    # global db
+    # db = DatabaseHandler()
     try:
         # Connect to Asterisk AMI
         ami_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

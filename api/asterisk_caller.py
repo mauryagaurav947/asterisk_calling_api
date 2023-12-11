@@ -5,7 +5,7 @@ from asterisk.ami import AMIClient, AMIClientAdapter, SimpleAction
 
 router = APIRouter(tags=["Asterisk caller"])
 
-client = AMIClient(address='192.168.1.32', port=5038)
+client = AMIClient(address='192.168.1.23', port=5038)
 client.login(username='asterisk', secret='asterisk')
 
 
